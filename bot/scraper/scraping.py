@@ -6,12 +6,23 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 # Menggunakan 3 web browser yang berbeda
 from selenium.webdriver.chrome.options import Options
+import os 
+import time 
+import logging 
+import json
+from dotenv import load_dotenv
 
-def scrape_data(url):
+load_dotenv()
+
+def scrape_data(url, output_file=os.getenv('INTERNS')):
     try:
+        logging.bassicConfig(level=logging.INFO)
         # Configurasi webdriver dengan 3 web browser
         options = Options()
         options.add_argument('-headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+
         # Chrome
         driver = webdriver.Chrome(options=options)
         # Getting URL yang diberikan nantinya
@@ -50,7 +61,12 @@ def scrape_data(url):
                 )
             except AttributeError:
                 continue
+        
+        # Simpan ke file JSON
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(interns, f, ensure_ascii=False, indent=2)
 
+        logging.info(f"Scraping berhasil, {len(interns)} data disimpan ke {output_file}")
         return interns
 
     except Exception as e:
