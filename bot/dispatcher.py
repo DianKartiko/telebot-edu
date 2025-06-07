@@ -6,6 +6,7 @@ from importlib import import_module
 import os 
 import logging
 from bot.utils.logger import Logging
+from bot.scraper.data_scraper import run_scrapers
 
 # Load Data
 load_dotenv()
@@ -19,21 +20,23 @@ class Dispatcher:
         self.scheduler = BackgroundScheduler()
         self.handler = HandlerMessage()
 
-    def _import_scraper(self):
-        """Dynamic import untuk menghindari circular imports"""
-        scraper_module = import_module('bot.scraper.interns')
-        return scraper_module.run_scraper
+    # def _import_scraper(self):
+    #     """Dynamic import untuk menghindari circular imports"""
+    #     scraper_module = import_module('bot.scraper.data_scraper')
+    #     return scraper_module.run_scrapers
 
     def run(self):
-        """Jalankan bot dan scheduler"""
-        # Scraping otomatis setiap 6 jam
-        self.scheduler.add_job(
-            'bot.scraper.interns:run_scraper',
-            "interval",
-            hours=int(os.getenv("SCRAPER_INTERVAL"))
-        )
-        self.scheduler.start()
+        # """Jalankan bot dan scheduler"""
+        # # Scraping otomatis setiap 6 jam
+        # # run_scraper = self._import_scraper()
+        # self.scheduler.add_job(
+        #     run_scrapers,
+        #     "interval",
+        #     hours=int(os.getenv("SCRAPER_INTERVAL"))
+        # )
+        # self.scheduler.start()
 
+        run_scrapers()
         # Build Application Builder
         app = ApplicationBuilder().token(KEY).build()
         
