@@ -1,29 +1,34 @@
 from telegram.ext import CommandHandler, ApplicationBuilder, MessageHandler, filters
 from bot.handlers.handlers import HandlerMessage
-from bot.utils import logger
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
+from importlib import import_module
 import os 
-from bot.scraper.interns import run_scraper
 import logging
+from bot.utils.logger import Logging
 
 # Load Data
 load_dotenv()
 KEY = os.getenv("BOT_TOKEN")
 
 logging = logging.getLogger(__name__)
-log = logger.setup_logging()
+log = Logging.setup_logging()
 
 class Dispatcher:
     def __init__(self):
         self.scheduler = BackgroundScheduler()
         self.handler = HandlerMessage()
 
+    def _import_scraper(self):
+        """Dynamic import untuk menghindari circular imports"""
+        scraper_module = import_module('bot.scraper.interns')
+        return scraper_module.run_scraper
+
     def run(self):
         """Jalankan bot dan scheduler"""
         # Scraping otomatis setiap 6 jam
         self.scheduler.add_job(
-            run_scraper,
+            'bot.scraper.interns:run_scraper',
             "interval",
             hours=int(os.getenv("SCRAPER_INTERVAL"))
         )

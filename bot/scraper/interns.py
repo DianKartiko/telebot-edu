@@ -10,7 +10,7 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from bot.utils.database import DatabaseManager
+from bot.utils.database import DatabaseIntern
 
 load_dotenv()
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class KalibrrScraper:
     def __init__(self):
-        self.db = DatabaseManager()
+        self.db = DatabaseIntern()
         self.url = os.getenv("KALIBRR_URL")
         self.delay = float(os.getenv("SCRAPER_DELAY"))
         self.driver = self._init_webdriver()
@@ -81,7 +81,7 @@ class KalibrrScraper:
                     logger.warning(f"Data tidak lengkap: {e}")
                     continue
             
-            logger.info(f"✅ Berhasil scrape {len(internships)} magang")
+            logger.info(f"✅ Berhasil scrape {len(internships)} data magang")
             return internships
 
         except Exception as e:

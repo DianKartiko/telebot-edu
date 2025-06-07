@@ -1,9 +1,8 @@
 # main.py
 from bot.dispatcher import Dispatcher
-import logging
-from bot.utils.logger import setup_logging
+from bot.utils.logger import Logging
 
-setup_logging()
+Logging.setup_logging()
 
 # 3. Run server with fallback
 if __name__ == "__main__":
@@ -11,5 +10,5 @@ if __name__ == "__main__":
         bot = Dispatcher()
         bot.run()
     except Exception as e:
-        logging.critical(f"Fatal error: {str(e)}", exc_info=True)
+        Logging.critical_error(e)
         # Implement restart mechanism here if needed

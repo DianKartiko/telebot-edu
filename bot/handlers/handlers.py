@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.error import NetworkError, TimedOut
 import logging
-from bot.utils.database import DatabaseManager
+from bot.utils.database import DatabaseIntern
 from bot.handlers.prompt_engine import PromptEngine
 import os
 from dotenv import load_dotenv
@@ -11,7 +11,7 @@ load_dotenv()
 
 class HandlerMessage:
     def __init__(self):
-        self.db = DatabaseManager()
+        self.db = DatabaseIntern()
         self.prompt_engine = PromptEngine()
 
     # Fungsi Untuk Menjalankan Bot
