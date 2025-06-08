@@ -13,6 +13,8 @@ class PromptEngine:
             intent = "magang"
         elif "kursus" in text or "course" in text:
             intent = "kursus"
+        elif "kerja" in text or "jobs" in text or "job" in text:
+            intent = "kerja"
         
         # Ekstrak parameter
         params = {}
@@ -49,5 +51,28 @@ class PromptEngine:
                     f"⏳ Deadline: {item['deadline']}\n\n"
                 )
             return message
+        
+        elif intent == "kursus":
+            print("Debug - Results Structure:", results)
+            message = "🔍 <b>Hasil Kursus:</b>\n\n"
+            for item in results:
+                message += (
+                    f"🏢 <b>{item['title']}</b>\n"
+                    f"📌 {item['duration']} ({item['module_total']})\n"
+                    f"⏳ Level: {item['level']}\n\n"
+                )
+            return message
+
+        elif intent == "kerja":
+            message = "🔍 <b>Hasil Kerja:</b>\n\n"
+            for item in results:
+                message += (
+                    f"🏢 <b>{item['perusahaan']}</b>\n"
+                    f"📌 {item['posisi']} ({item['lokasi']})\n"
+                    f"💰 Gaji: {item['gaji']}\n"
+                    f"⏳ Tipe Perkejaan: {item['job_type']}\n\n"
+                )
+            return message
+    
         else:
             return "ℹ️ Fitur pencarian kursus belum tersedia."

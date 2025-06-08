@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.error import NetworkError, TimedOut
 import logging
-from bot.utils.database import DatabaseIntern
+from bot.utils.database import DatabaseIntern, DatabaseCourse, DatabaseJob
 from bot.handlers.prompt_engine import PromptEngine
 import os
 from dotenv import load_dotenv
@@ -11,7 +11,11 @@ load_dotenv()
 
 class HandlerMessage:
     def __init__(self):
-        self.db = DatabaseIntern()
+        self.db_instances = {
+            "magang": DatabaseIntern(),
+            "course": DatabaseCourse(), 
+            "jobs": DatabaseJob()
+        }
         self.prompt_engine = PromptEngine()
 
     # Fungsi Untuk Menjalankan Bot
@@ -63,26 +67,120 @@ Saya masih dalam tahap pengembangan aktif dan terus belajar. Saat ini saya memil
         )
         await context.bot.send_message(chat_id=update.effective_chat.id, text=info_text)
 
-    # Fungsi untuk menangani pesan pengguna
+    # Fungsi untuk menangani pesan pengguna dengan debugging
     async def handler_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_input = update.message.text
         chat_id = update.effective_chat.id
+        
+        # DEBUG: Log input pengguna
+        logging.info(f"User input: {user_input}")
+        
+        try:
+            parsed = self.prompt_engine.parse_input(user_input)
+            # DEBUG: Log hasil parsing
+            logging.info(f"Parsed result: {parsed}")
+            
+            # Validasi struktur parsed
+            if not isinstance(parsed, dict) or 'intent' not in parsed:
+                logging.error(f"Invalid parsed structure: {parsed}")
+                await update.message.reply_text("❌ Format input tidak dapat dipahami")
+                return
 
-        parsed = self.prompt_engine.parse_input(user_input)
+            intent = parsed['intent']
+            # DEBUG: Log intent yang terdeteksi
+            logging.info(f"Detected intent: {intent}")
 
-        if not parsed["intent"]:
-            await update.message.reply_text("ℹ️ Ketik 'magang' untuk mulai mencari.")
-            return
+            # Cek apakah intent valid
+            if intent not in self.db_instances:
+                logging.warning(f"Intent '{intent}' not found in db_instances")
+                valid_intents = list(self.db_instances.keys())
+                await update.message.reply_text(
+                    f"❌ Intent tidak dikenali: '{intent}'\n"
+                    f"Intent yang tersedia: {', '.join(valid_intents)}"
+                )
+                return
 
-        # Cari di database
-        results = self.db.search_magang(
-            keyword=parsed["params"].get("keyword"),
-            limit=int(os.getenv("MAX_RESULTS", 5))
-        )
+            db_instance = self.db_instances[intent]
+            # DEBUG: Log database instance
+            logging.info(f"Database instance: {type(db_instance).__name__}")
+            
+            method_name = f"search_{intent}"
+            # DEBUG: Log method name yang dicari
+            logging.info(f"Looking for method: {method_name}")
+            
+            # Cek apakah method exists
+            search_method = getattr(db_instance, method_name, None)
+            if not search_method:
+                logging.error(f"Method {method_name} not found in {type(db_instance).__name__}")
+                available_methods = [method for method in dir(db_instance) if not method.startswith('_')]
+                await update.message.reply_text(
+                    f"❌ Method '{method_name}' tidak ditemukan\n"
+                    f"Method yang tersedia: {', '.join(available_methods)}"
+                )
+                return
 
-        # Format dan kirim hasil
-        response = self.prompt_engine.format_results(parsed["intent"], results)
-        await update.message.reply_text(response, parse_mode="HTML")
+            # DEBUG: Log parameter yang akan digunakan
+            params = parsed.get("params", {})
+            keyword = params.get("keyword", "")
+            limit = int(os.getenv("MAX_RESULTS", 5))
+            logging.info(f"Search parameters - keyword: '{keyword}', limit: {limit}")
+
+            # Panggil method search
+            logging.info(f"Calling {method_name} with keyword='{keyword}', limit={limit}")
+            results = search_method(keyword=keyword, limit=limit)
+            
+            # DEBUG: Log hasil search
+            logging.info(f"Search results count: {len(results) if results else 0}")
+            if results:
+                logging.info(f"First result sample: {results[0] if len(results) > 0 else 'None'}")
+            else:
+                logging.warning("No results returned from search")
+
+            # Format dan kirim response
+            if not results:
+                await update.message.reply_text(f"❌ Tidak ada data {intent} yang ditemukan untuk keyword '{keyword}'")
+                return
+
+            response = self.prompt_engine.format_results(intent, results)
+            # DEBUG: Log response yang akan dikirim
+            logging.info(f"Response length: {len(response)}")
+            
+            await update.message.reply_text(response, parse_mode="HTML")
+
+        except KeyError as e:
+            logging.error(f"KeyError - Method tidak tersedia: {str(e)}", exc_info=True)
+            await update.message.reply_text(f"🔧 KeyError: {str(e)} - Sedang dalam pengembangan")
+        except AttributeError as e:
+            logging.error(f"AttributeError - Attribute tidak ditemukan: {str(e)}", exc_info=True)
+            await update.message.reply_text(f"🔧 AttributeError: Method tidak tersedia")
+        except Exception as e:
+            logging.error(f"Unexpected error: {str(e)}", exc_info=True)
+            await update.message.reply_text(f"⚠️ Terjadi kesalahan sistem: {str(e)}")
+
+    # Method untuk testing database connections
+    async def test_databases(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Method untuk testing koneksi database"""
+        test_results = []
+        
+        for intent, db_instance in self.db_instances.items():
+            try:
+                method_name = f"search_{intent}"
+                search_method = getattr(db_instance, method_name, None)
+                
+                if search_method:
+                    # Test dengan keyword kosong
+                    results = search_method(keyword="", limit=1)
+                    status = f"✅ {intent}: OK ({len(results) if results else 0} records)"
+                else:
+                    status = f"❌ {intent}: Method {method_name} tidak ditemukan"
+                    
+            except Exception as e:
+                status = f"❌ {intent}: Error - {str(e)}"
+            
+            test_results.append(status)
+        
+        response = "🔧 **Test Database Connections:**\n\n" + "\n".join(test_results)
+        await update.message.reply_text(response)
 
     # Fungsi error handler
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
