@@ -1,5 +1,4 @@
 import sqlite3
-import logging
 from datetime import datetime
 from pathlib import Path
 import os
@@ -165,6 +164,12 @@ class DatabaseCourse:
                 )
             """)
             conn.commit()
+
+    def _get_connection(self):
+        """Koneksi ke SQLite dengan hasil berupa dictionary"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
             
     def save_courses(self, data):  # Ubah nama method untuk konsistensi
         """Simpan data course dari Dicoding"""

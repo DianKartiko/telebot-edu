@@ -60,7 +60,7 @@ class BaseScraper:
             wait_element = self._get_wait_element()
             logger.info(f"⏳ Menunggu elemen: {wait_element}")
             
-            WebDriverWait(self.driver, 20).until(
+            WebDriverWait(self.driver, 30).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, f".{wait_element}"))
             )
             
@@ -278,12 +278,12 @@ class CourseScraper(BaseScraper):
         self.source_name = "Dicoding"
     
     def _get_wait_element(self):
-        return "course-card course-card--with-logo "
+        return "course-card course-card--with-logo"
 
     def _extract_data(self, soup):
         courses = []
     
-        for item in soup.findall('a', class_="course-card course-card--with-logo "):
+        for item in soup.findall('a', class_="course-card course-card--with-logo"):
             try:
                     # Pastikan semua elemen ada sebelum mengambil text
                     title = item.find('h5', class_='course-card__name')
@@ -295,7 +295,7 @@ class CourseScraper(BaseScraper):
                         continue
 
                     courses.append({
-                        'sumber': 'Kalibrr',
+                        'sumber': 'Dicoding',
                         'title': title.text.strip() if title else 'Tidak disebutkan',
                         'duration': duration.text.strip() if duration else 'Tidak disebutkan',
                         'module_total': module_total.text.strip() if module_total else 'Tidak disebutkan',
