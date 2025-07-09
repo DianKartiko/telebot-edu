@@ -2,7 +2,6 @@ from telegram.ext import CommandHandler, ApplicationBuilder, MessageHandler, fil
 from bot.handlers.handlers import HandlerMessage
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
-from importlib import import_module
 import os 
 import logging
 from bot.utils.logger import Logging
@@ -46,7 +45,7 @@ class Dispatcher:
         app.add_handler(CommandHandler('info', self.handler.info))
 
         # adding Message Handler
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handler.handler_message))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handler.handle_message))
         
         # Error Handling dalam pesan
         app.add_error_handler(self.handler.error_handler)
