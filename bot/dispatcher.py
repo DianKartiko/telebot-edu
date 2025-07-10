@@ -20,16 +20,7 @@ class Dispatcher:
         self.handler = HandlerMessage()
 
     def run(self):
-        # """Jalankan bot dan scheduler"""
-        # # Scraping otomatis setiap 6 jam
-        # # run_scraper = self._import_scraper()
-        # self.scheduler.add_job(
-        #     run_scrapers,
-        #     "interval",
-        #     hours=int(os.getenv("SCRAPER_INTERVAL"))
-        # )
-        # self.scheduler.start()
-
+        """Running all commandHandler and scraping data"""
         run_scrapers()
         # Build Application Builder
         app = ApplicationBuilder().token(KEY).build()
