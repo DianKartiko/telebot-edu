@@ -32,7 +32,7 @@ class Dispatcher:
         app.add_handler(CommandHandler('info', self.handler.info))
 
         # adding Message Handler
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handler.handler_message))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handler.handle_message))
         
         # Error Handling dalam pesan
         app.add_error_handler(self.handler.error_handler)

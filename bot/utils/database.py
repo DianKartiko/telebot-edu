@@ -164,13 +164,12 @@ class DatabaseCourse:
                 )
             """)
             conn.commit()
-
     def _get_connection(self):
         """Koneksi ke SQLite dengan hasil berupa dictionary"""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
-            
+    
     def save_courses(self, data):  # Ubah nama method untuk konsistensi
         """Simpan data course dari Dicoding"""
         if not data:
@@ -178,7 +177,7 @@ class DatabaseCourse:
             
         with self._get_connection() as conn:
             conn.executemany("""
-                INSERT OR IGNORE INTO courses  # Perbaikan: courses bukan jobs
+                INSERT OR IGNORE INTO courses 
                 (sumber, title, duration, module_total) 
                 VALUES (?, ?, ?, ?)
             """, [

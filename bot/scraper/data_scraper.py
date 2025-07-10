@@ -278,35 +278,66 @@ class CourseScraper(BaseScraper):
         self.source_name = "Dicoding"
     
     def _get_wait_element(self):
-        return "course-card course-card--with-logo"
-
+        return "course-card"  # Class yang lebih umum untuk waiting
+    
     def _extract_data(self, soup):
         courses = []
-    
-        for item in soup.findall('a', class_="course-card course-card--with-logo"):
+        
+        # Coba beberapa selector untuk handling perubahan UI
+        course_selectors = [
+            'a.course-card',  # Selector utama
+            'div[class*="course-card"]',  # Fallback 1
+            'article[class*="course"]'  # Fallback 2
+        ]
+        
+        course_items = []
+        for selector in course_selectors:
+            course_items = soup.select(selector)
+            if course_items:
+                logger.info(f"✅ Menggunakan selector: {selector} - {len(course_items)} items ditemukan")
+                break
+        
+        if not course_items:
+            logger.warning("❌ Tidak ada course items ditemukan dengan selector yang ada")
+            return []
+        
+        for item in course_items:
             try:
-                    # Pastikan semua elemen ada sebelum mengambil text
-                    title = item.find('h5', class_='course-card__name')
-                    duration = item.find('span', class_='mr-2')
-                    module_total = item.find('span', class_='mr-3')
-
-                # Validasi elemen
-                    if not all([title, duration]):
-                        continue
-
-                    courses.append({
-                        'sumber': 'Dicoding',
-                        'title': title.text.strip() if title else 'Tidak disebutkan',
-                        'duration': duration.text.strip() if duration else 'Tidak disebutkan',
-                        'module_total': module_total.text.strip() if module_total else 'Tidak disebutkan',
-                    })
-
-            except AttributeError as e:
-                    logger.warning(f"Data tidak lengkap: {e}")
+                # Ekstrak data dengan fallback yang lebih robust
+                title = self._safe_extract(item, 'h5', 'course-card__name') or \
+                        self._extract_by_contains(item, 'title') or \
+                        self._safe_extract(item, 'h3') or \
+                        self._safe_extract(item, 'h2')
+                
+                duration = self._safe_extract(item, 'span', 'mr-2') or \
+                            self._extract_by_contains(item, 'duration')
+                
+                module_total = self._safe_extract(item, 'span', 'mr-3') or \
+                                self._extract_by_contains(item, 'module')
+                
+                level = self._safe_extract(item, 'span', 'course-card__level') or \
+                        self._extract_by_contains(item, 'level')
+                
+                # Pastikan data minimal yang diperlukan ada
+                if not title:
                     continue
-            
-            logger.info(f"✅ Berhasil scrape {len(courses)} data magang")
-            return courses
+                    
+                courses.append({
+                    'sumber': self.source_name,
+                    'title': title.strip(),
+                    'duration': duration.strip() if duration else 'Tidak disebutkan',
+                    'module_total': module_total.strip() if module_total else 'Tidak disebutkan',
+                    'level': level.strip() if level else 'Pemula',
+                })
+                
+                logger.debug(f"📚 Course ditemukan: {title}")
+
+            except Exception as e:
+                logger.warning(f"Gagal parsing course item: {str(e)}")
+                continue
+        
+        logger.info(f"✅ Berhasil scrape {len(courses)} courses")
+        return courses
 
     def _safe_extract(self, parent, tag, class_=None):
         """Helper untuk ekstrak text dengan aman"""
