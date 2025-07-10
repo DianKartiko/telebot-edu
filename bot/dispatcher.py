@@ -19,11 +19,6 @@ class Dispatcher:
         self.scheduler = BackgroundScheduler()
         self.handler = HandlerMessage()
 
-    # def _import_scraper(self):
-    #     """Dynamic import untuk menghindari circular imports"""
-    #     scraper_module = import_module('bot.scraper.data_scraper')
-    #     return scraper_module.run_scrapers
-
     def run(self):
         # """Jalankan bot dan scheduler"""
         # # Scraping otomatis setiap 6 jam
@@ -49,7 +44,6 @@ class Dispatcher:
         
         # Error Handling dalam pesan
         app.add_error_handler(self.handler.error_handler)
-
 
         # Running Telebot
         logging.info("🤖 Bot berjalan...")
