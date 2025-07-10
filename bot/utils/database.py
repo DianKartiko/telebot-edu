@@ -1,6 +1,7 @@
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+from typing import List, Dict
 import os
 from dotenv import load_dotenv
 
@@ -59,22 +60,28 @@ class DatabaseIntern:
             ])
             conn.commit()
 
-    def search_magang(self, keyword=None, limit=5):
-        """Cari magang berdasarkan keyword (posisi/lokasi)"""
+    def search_magang(self, keyword: str = "", location: str = "", limit: int = 5) -> List[Dict]:
+        """Cari magang dengan parameter yang aman"""
         with self._get_connection() as conn:
+            params = []
+            query = "SELECT * FROM magang"
+            
+            # Bangun klausa WHERE dinamis
+            conditions = []
             if keyword:
-                cursor = conn.execute("""
-                    SELECT * FROM magang 
-                    WHERE posisi LIKE ? OR lokasi LIKE ?
-                    ORDER BY tanggal_scrape DESC 
-                    LIMIT ?
-                """, (f"%{keyword}%", f"%{keyword}%", limit))
-            else:
-                cursor = conn.execute("""
-                    SELECT * FROM magang 
-                    ORDER BY tanggal_scrape DESC 
-                    LIMIT ?
-                """, (limit,))
+                conditions.append("(posisi LIKE ? OR perusahaan LIKE ? OR gaji LIKE ?)")
+                params.extend([f"%{keyword}%"] * 3)
+            if location:
+                conditions.append("lokasi LIKE ?")
+                params.append(f"%{location}%")
+                
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+                
+            query += " ORDER BY tanggal_scrape DESC LIMIT ?"
+            params.append(limit)
+            
+            cursor = conn.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
 
 class DatabaseJob:
@@ -126,22 +133,28 @@ class DatabaseJob:
 
         conn.commit()
 
-    def search_job(self, keyword=None, limit=5):
-        """Cari pekerjaan berdasarkan keyword (posisi/lokasi)"""
+    def search_jobs(self, keyword: str = "", location: str = "", limit: int = 5) -> List[Dict]:
+        """Cari magang dengan parameter yang aman"""
         with self._get_connection() as conn:
+            params = []
+            query = "SELECT * FROM jobs"
+            
+            # Bangun klausa WHERE dinamis
+            conditions = []
             if keyword:
-                cursor = conn.execute("""
-                    SELECT * FROM jobs 
-                    WHERE posisi LIKE ? OR lokasi LIKE ?
-                    ORDER BY tanggal_scrape DESC 
-                    LIMIT ?
-                """, (f"%{keyword}%", f"%{keyword}%", limit))
-            else:
-                cursor = conn.execute("""
-                    SELECT * FROM jobs 
-                    ORDER BY tanggal_scrape DESC 
-                    LIMIT ?
-                """, (limit,))
+                conditions.append("(posisi LIKE ? OR perusahaan LIKE ? OR gaji LIKE ?)")
+                params.extend([f"%{keyword}%"] * 3)
+            if location:
+                conditions.append("lokasi LIKE ?")
+                params.append(f"%{location}%")
+                
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+                
+            query += " ORDER BY tanggal_scrape DESC LIMIT ?"
+            params.append(limit)
+            
+            cursor = conn.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
 
 class DatabaseCourse:
@@ -164,6 +177,7 @@ class DatabaseCourse:
                 )
             """)
             conn.commit()
+            
     def _get_connection(self):
         """Koneksi ke SQLite dengan hasil berupa dictionary"""
         conn = sqlite3.connect(self.db_path)
@@ -190,20 +204,18 @@ class DatabaseCourse:
             ])
             conn.commit()
 
-    def search_course(self, keyword=None, limit=5):  # Perbaikan typo seacrh -> search
-        """Cari course berdasarkan keyword (title/duration)"""
+    def search_course(self, keyword: str = "", limit: int = 5) -> List[Dict]:
+        """Implementasi untuk kursus (tanpa lokasi)"""
         with self._get_connection() as conn:
+            query = "SELECT * FROM courses"
+            params = []
+            
             if keyword:
-                cursor = conn.execute("""
-                    SELECT * FROM courses 
-                    WHERE title LIKE ? OR duration LIKE ?
-                    ORDER BY tanggal_scrape DESC 
-                    LIMIT ?
-                """, (f"%{keyword}%", f"%{keyword}%", limit))
-            else:
-                cursor = conn.execute("""
-                    SELECT * FROM courses 
-                    ORDER BY tanggal_scrape DESC 
-                    LIMIT ?
-                """, (limit,))
+                query += " WHERE (title LIKE ? OR sumber LIKE ? OR duration LIKE ?)"
+                params.extend([f"%{keyword}%"] * 3)
+                
+            query += " ORDER BY tanggal_scrape DESC LIMIT ?"
+            params.append(limit)
+            
+            cursor = conn.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
