@@ -16,8 +16,6 @@ Bot Telegram ini dirancang untuk membantu mahasiswa menemukan informasi terkait 
 -   [Konfigurasi](#konfigurasi)
 -   [Penggunaan](#penggunaan)
 -   [Struktur Proyek](#struktur-proyek)
--   [Poin Penting Kode](#poin-penting-kode)
--   [Kontribusi](#kontribusi)
 -   [Lisensi](#lisensi)
 -   [Kontak](#kontak)
 
@@ -231,3 +229,11 @@ Berikut adalah gambaran umum struktur direktori proyek ini:
     │ ├── database/                 # Direktori untuk file database lokal (jika ada)
     │ │ ├── bot.db                  # (Perubahan Nama) Contoh file database SQLite
     └── README.md                   # File dokumentasi proyek
+
+---
+## Kontak
+
+Punya pertanyaan atau ingin berdiskusi? Jangan sungkan untuk menghubungi!
+
+[![LinkedIn](https://img.shields.io/badge/-LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)]([https://www.linkedin.com/in/dian-wicaksono/])
+[![Email](https://img.shields.io/badge/-Email-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:auliakartiko28@gmail.com)
