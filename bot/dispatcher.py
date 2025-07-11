@@ -21,7 +21,7 @@ class Dispatcher:
 
 
     def run(self):
-
+        """Running all commandHandler and scraping data"""
         run_scrapers()
         # Build Application Builder
         app = ApplicationBuilder().token(KEY).build()
