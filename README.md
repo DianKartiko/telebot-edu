@@ -235,5 +235,5 @@ Berikut adalah gambaran umum struktur direktori proyek ini:
 
 Punya pertanyaan atau ingin berdiskusi? Jangan sungkan untuk menghubungi!
 
-[![LinkedIn](https://img.shields.io/badge/-LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)]([https://www.linkedin.com/in/dian-wicaksono/])
+[![LinkedIn](https://img.shields.io/badge/-LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/dian-wicaksono/)
 [![Email](https://img.shields.io/badge/-Email-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:auliakartiko28@gmail.com)
