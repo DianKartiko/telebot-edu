@@ -119,10 +119,11 @@ class LLMIntegration:
     def _build_prompt(self, user_input: str, keywords: Dict, items: List[Dict]) -> str:
         """Format data untuk prompt LLM"""
         items_str = "\n".join(
-            f"{idx+1}. {item['posisi']} - {item.get('perusahaan', 'N/A')}\n"
+            f"{idx+1}. {self._get_item_title(item, keywords['intent'])} - {item.get('penyelenggara', 'N/A')}\n"
             f"   Lokasi: {item.get('lokasi', 'N/A')}\n"
             f"   Deskripsi: {item.get('deskripsi', '')[:100]}...\n"
-            for idx, item in enumerate(items))
+            for idx, item in enumerate(items)
+        )
         
         return f"""
         User mencari: "{user_input}"
@@ -144,3 +145,10 @@ class LLMIntegration:
         5. Jangan tambahkan informasi yang tidak ada di data
         6. Berikan dalam format bullet points
         """
+    
+    def _get_item_title(self, item: Dict, intent: str) -> str:
+        """Dapatkan judul berdasarkan tipe data"""
+        if intent == "course":
+            return item.get('judul', 'Kursus Tanpa Judul')  # Kolom spesifik kursus
+        else:
+            return item.get('posisi', 'Posisi Tidak Tersedia')  # Untuk magang/pekerjaan
