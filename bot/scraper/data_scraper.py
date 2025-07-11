@@ -60,7 +60,7 @@ class BaseScraper:
             wait_element = self._get_wait_element()
             logger.info(f"⏳ Menunggu elemen: {wait_element}")
             
-            WebDriverWait(self.driver, 20).until(
+            WebDriverWait(self.driver, 30).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, f".{wait_element}"))
             )
             
@@ -305,18 +305,18 @@ class CourseScraper(BaseScraper):
             try:
                 # Ekstrak data dengan fallback yang lebih robust
                 title = self._safe_extract(item, 'h5', 'course-card__name') or \
-                       self._extract_by_contains(item, 'title') or \
-                       self._safe_extract(item, 'h3') or \
-                       self._safe_extract(item, 'h2')
+                        self._extract_by_contains(item, 'title') or \
+                        self._safe_extract(item, 'h3') or \
+                        self._safe_extract(item, 'h2')
                 
                 duration = self._safe_extract(item, 'span', 'mr-2') or \
-                          self._extract_by_contains(item, 'duration')
+                            self._extract_by_contains(item, 'duration')
                 
                 module_total = self._safe_extract(item, 'span', 'mr-3') or \
-                             self._extract_by_contains(item, 'module')
+                                self._extract_by_contains(item, 'module')
                 
                 level = self._safe_extract(item, 'span', 'course-card__level') or \
-                       self._extract_by_contains(item, 'level')
+                        self._extract_by_contains(item, 'level')
                 
                 # Pastikan data minimal yang diperlukan ada
                 if not title:
