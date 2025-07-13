@@ -3,6 +3,9 @@ from telegram.ext import ContextTypes
 from telegram.error import NetworkError, TimedOut, BadRequest
 from dotenv import load_dotenv
 import logging
+import asyncio
+import hashlib
+from typing import Optional, Dict, Any
 # Import Own Library
 from bot.utils.logger import Logging
 from bot.utils.llm_integration import EnhancedLLMIntegration
@@ -11,12 +14,226 @@ load_dotenv()
 
 Logging.setup_logging()
 
+class MessageManager:
+    """Helper class untuk mengelola edit message dengan optimal"""
+    
+    def __init__(self):
+        self.message_cache: Dict[str, Dict[str, Any]] = {}
+        self.max_message_length = 4000  # Buffer untuk safety
+        self.min_edit_interval = 0.5  # Minimum interval antara edits (seconds)
+        
+    def _get_message_key(self, chat_id: int, message_id: int) -> str:
+        """Generate unique key untuk message"""
+        return f"{chat_id}_{message_id}"
+    
+    def _hash_text(self, text: str) -> str:
+        """Generate hash untuk membandingkan konten"""
+        return hashlib.md5(text.encode()).hexdigest()
+    
+    def _truncate_message(self, text: str) -> str:
+        """Truncate message jika terlalu panjang"""
+        if len(text) <= self.max_message_length:
+            return text
+        
+        # Truncate dengan menambahkan indicator
+        truncated = text[:self.max_message_length - 50]
+        # Cari posisi terakhir yang aman untuk truncate (space atau newline)
+        last_safe_pos = max(
+            truncated.rfind(' '),
+            truncated.rfind('\n'),
+            truncated.rfind('.')
+        )
+        
+        if last_safe_pos > self.max_message_length * 0.8:
+            truncated = truncated[:last_safe_pos]
+        
+        return truncated + "\n\n... (pesan dipotong karena terlalu panjang)"
+    
+    async def safe_edit_message(self, 
+                               context: ContextTypes.DEFAULT_TYPE,
+                               chat_id: int,
+                               message_id: int,
+                               text: str,
+                               parse_mode: str = None) -> bool:
+        """
+        Safely edit message dengan berbagai validasi
+        Returns True jika berhasil, False jika gagal
+        """
+        try:
+            # Validasi input
+            if not text or not text.strip():
+                logging.warning(f"Empty text for edit message {message_id}")
+                return False
+            
+            # Truncate jika terlalu panjang
+            text = self._truncate_message(text.strip())
+            
+            # Get message key
+            msg_key = self._get_message_key(chat_id, message_id)
+            
+            # Check cache untuk menghindari edit yang sama
+            if msg_key in self.message_cache:
+                cached_hash = self.message_cache[msg_key].get('hash')
+                current_hash = self._hash_text(text)
+                
+                if cached_hash == current_hash:
+                    logging.debug(f"Skipping edit - same content for message {message_id}")
+                    return True
+                
+                # Check interval untuk rate limiting
+                last_edit_time = self.message_cache[msg_key].get('last_edit_time', 0)
+                current_time = asyncio.get_event_loop().time()
+                
+                if current_time - last_edit_time < self.min_edit_interval:
+                    await asyncio.sleep(self.min_edit_interval - (current_time - last_edit_time))
+            
+            # Attempt to edit message
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text,
+                parse_mode=parse_mode
+            )
+            
+            # Update cache
+            self.message_cache[msg_key] = {
+                'hash': self._hash_text(text),
+                'last_edit_time': asyncio.get_event_loop().time(),
+                'text': text
+            }
+            
+            logging.debug(f"Successfully edited message {message_id}")
+            return True
+            
+        except BadRequest as e:
+            error_msg = str(e).lower()
+            
+            # Handle specific BadRequest cases
+            if "message is not modified" in error_msg:
+                logging.debug(f"Message {message_id} not modified - same content")
+                return True
+                
+            elif "message to edit not found" in error_msg:
+                logging.warning(f"Message {message_id} not found for editing")
+                return False
+                
+            elif "message can't be edited" in error_msg:
+                logging.warning(f"Message {message_id} can't be edited (too old or deleted)")
+                return False
+                
+            elif "message is too long" in error_msg:
+                # Retry dengan pesan yang lebih pendek
+                logging.warning(f"Message too long, retrying with shorter version")
+                shorter_text = self._truncate_message(text[:self.max_message_length // 2])
+                return await self.safe_edit_message(context, chat_id, message_id, shorter_text, parse_mode)
+                
+            else:
+                logging.error(f"BadRequest error editing message {message_id}: {str(e)}")
+                return False
+                
+        except NetworkError as e:
+            logging.error(f"Network error editing message {message_id}: {str(e)}")
+            return False
+            
+        except TimedOut as e:
+            logging.error(f"Timeout editing message {message_id}: {str(e)}")
+            return False
+            
+        except Exception as e:
+            logging.error(f"Unexpected error editing message {message_id}: {str(e)}")
+            return False
+    
+    async def safe_send_message(self, 
+                                context: ContextTypes.DEFAULT_TYPE,
+                                chat_id: int,
+                                text: str,
+                                parse_mode: str = None) -> Optional[int]:
+        """
+        Safely send message dan return message_id
+        """
+        try:
+            text = self._truncate_message(text.strip())
+            
+            message = await context.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode=parse_mode
+            )
+            
+            # Cache initial message
+            msg_key = self._get_message_key(chat_id, message.message_id)
+            self.message_cache[msg_key] = {
+                'hash': self._hash_text(text),
+                'last_edit_time': asyncio.get_event_loop().time(),
+                'text': text
+            }
+            
+            return message.message_id
+            
+        except Exception as e:
+            logging.error(f"Error sending message to chat {chat_id}: {str(e)}")
+            return None
+    
+    def cleanup_cache(self, max_age_seconds: int = 3600):
+        """Cleanup old cache entries"""
+        current_time = asyncio.get_event_loop().time()
+        keys_to_remove = []
+        
+        for key, data in self.message_cache.items():
+            if current_time - data.get('last_edit_time', 0) > max_age_seconds:
+                keys_to_remove.append(key)
+        
+        for key in keys_to_remove:
+            del self.message_cache[key]
+        
+        if keys_to_remove:
+            logging.info(f"Cleaned up {len(keys_to_remove)} old cache entries")
+
+
 class HandlerMessage:
     def __init__(self):
         self.llm = EnhancedLLMIntegration()
+        self.message_manager = MessageManager()
+        self._cleanup_task = None
+        self._cleanup_started = False
+    
+    def _ensure_cleanup_task(self):
+        """Ensure cleanup task is started when event loop is available"""
+        if not self._cleanup_started:
+            try:
+                loop = asyncio.get_running_loop()
+                self._cleanup_task = loop.create_task(self._periodic_cleanup())
+                self._cleanup_started = True
+                logging.info("Periodic cleanup task started")
+            except RuntimeError:
+                # No event loop running, will try again later
+                pass
+    
+    async def _periodic_cleanup(self):
+        """Periodic cleanup untuk message cache"""
+        try:
+            while True:
+                await asyncio.sleep(1800)  # Cleanup every 30 minutes
+                self.message_manager.cleanup_cache()
+                logging.debug("Periodic cleanup completed")
+        except asyncio.CancelledError:
+            logging.info("Periodic cleanup task cancelled")
+            raise
+        except Exception as e:
+            logging.error(f"Error in periodic cleanup: {str(e)}")
+    
+    def stop_cleanup_task(self):
+        """Stop the cleanup task"""
+        if self._cleanup_task and not self._cleanup_task.done():
+            self._cleanup_task.cancel()
+            self._cleanup_started = False
+            logging.info("Cleanup task stopped")
     
     # Fungsi Untuk Menjalankan Bot
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # Ensure cleanup task is started
+        self._ensure_cleanup_task()
+        
         text = '''
 🤖 Halo! Selamat datang di Virtual Assistant Bot!
 
@@ -35,7 +252,7 @@ Saya masih dalam tahap pengembangan aktif dan terus belajar. Saat ini saya memil
 
 💡 Tips: Gunakan kalimat sederhana dan kata kunci jelas untuk hasil terbaik.
             '''
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        await self.message_manager.safe_send_message(context, update.effective_chat.id, text)
 
     # Fungsi Help
     async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -51,7 +268,7 @@ Saya masih dalam tahap pengembangan aktif dan terus belajar. Saat ini saya memil
 "Tampilkan lowongan magang bidang TI di Bandung"
 "Kursus tersedia untuk pemula di bidang keuangan"
         '''
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+        await self.message_manager.safe_send_message(context, update.effective_chat.id, text)
 
     # Fungsi Info
     async def info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -63,64 +280,132 @@ Saya masih dalam tahap pengembangan aktif dan terus belajar. Saat ini saya memil
 "Model ini dilatih terutama untuk SEA Region.\n"
 "Mendukung multibahasa seperti bahasa Inggris, Indonesia, Vietnam, Thai, Tagalog, Malaysia, dsb."
         )
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=info_text)
+        await self.message_manager.safe_send_message(context, update.effective_chat.id, info_text)
+
+    # Fungsi untuk streaming response dengan edit message
+    async def stream_response(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                             initial_text: str = "🤔 Sedang memproses...") -> Optional[int]:
+        """
+        Create initial message untuk streaming dan return message_id
+        """
+        return await self.message_manager.safe_send_message(
+            context, 
+            update.effective_chat.id, 
+            initial_text
+        )
+    
+    async def update_streaming_message(self, context: ContextTypes.DEFAULT_TYPE, 
+                                      chat_id: int, message_id: int, text: str) -> bool:
+        """
+        Update streaming message dengan safe edit
+        """
+        return await self.message_manager.safe_edit_message(
+            context, 
+            chat_id, 
+            message_id, 
+            text
+        )
 
     # Fungsi untuk menangani pesan pengguna dengan enhanced handling
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
-        Enhanced message handler dengan error handling yang lebih baik
-        dan integrasi dengan EnhancedLLMIntegration
+        Enhanced message handler dengan optimized edit message
         """
+        # Ensure cleanup task is started
+        self._ensure_cleanup_task()
+        
         # Validasi input dasar
         if not update or not update.message or not update.message.text:
-            await update.message.reply_text("⚠️ Pesan tidak valid. Silakan kirim pesan teks.")
+            await self.message_manager.safe_send_message(
+                context, 
+                update.effective_chat.id, 
+                "⚠️ Pesan tidak valid. Silakan kirim pesan teks."
+            )
             return
         
         # Validasi user
         if not update.effective_user:
-            await update.message.reply_text("⚠️ Tidak dapat mengidentifikasi pengguna.")
+            await self.message_manager.safe_send_message(
+                context, 
+                update.effective_chat.id, 
+                "⚠️ Tidak dapat mengidentifikasi pengguna."
+            )
             return
         
-        # Reset has_replied flag untuk pesan baru
-        context.chat_data["has_replied"] = False
+        # Initialize context data
+        if "streaming_message_id" not in context.chat_data:
+            context.chat_data["streaming_message_id"] = None
         
         try:
             user_input = update.message.text.strip()
             
             # Validasi input tidak kosong
             if not user_input:
-                await update.message.reply_text("⚠️ Pesan tidak boleh kosong. Silakan kirim pertanyaan yang jelas.")
+                await self.message_manager.safe_send_message(
+                    context, 
+                    update.effective_chat.id, 
+                    "⚠️ Pesan tidak boleh kosong. Silakan kirim pertanyaan yang jelas."
+                )
                 return
             
-            # Validasi panjang input (untuk menghindari spam)
+            # Validasi panjang input
             if len(user_input) > 1000:
-                await update.message.reply_text("⚠️ Pesan terlalu panjang. Maksimal 1000 karakter.")
+                await self.message_manager.safe_send_message(
+                    context, 
+                    update.effective_chat.id, 
+                    "⚠️ Pesan terlalu panjang. Maksimal 1000 karakter."
+                )
                 return
             
-            # Log user input untuk debugging
+            # Log user input
             logging.info(f"User {update.effective_user.id} sent: {user_input[:100]}...")
             
+            # Create initial streaming message
+            streaming_msg_id = await self.stream_response(update, context)
+            if streaming_msg_id:
+                context.chat_data["streaming_message_id"] = streaming_msg_id
+            
             # Process dengan EnhancedLLMIntegration
-            # Note: generate_response di EnhancedLLMIntegration sudah handle sending message
-            response = await self.llm.process_user_request(user_input, update)
+            response = await self.llm.process_user_request(user_input, update, context)
             
             # Validasi response
             if not response or not response.strip():
                 fallback_response = "⚠️ Maaf, tidak dapat memproses permintaan Anda saat ini. Silakan coba lagi."
-                if not context.chat_data.get("has_replied"):
-                    await update.message.reply_text(fallback_response)
-                    context.chat_data["has_replied"] = True
-                return fallback_response
+                
+                if streaming_msg_id:
+                    await self.update_streaming_message(
+                        context, 
+                        update.effective_chat.id, 
+                        streaming_msg_id, 
+                        fallback_response
+                    )
+                else:
+                    await self.message_manager.safe_send_message(
+                        context, 
+                        update.effective_chat.id, 
+                        fallback_response
+                    )
+                return
             
-            # Jika response belum dikirim via streaming di LLM (fallback)
-            if not context.chat_data.get("has_replied"):
-                await update.message.reply_text(response)
-                context.chat_data["has_replied"] = True
+            # Update final response jika ada streaming message
+            if streaming_msg_id:
+                success = await self.update_streaming_message(
+                    context, 
+                    update.effective_chat.id, 
+                    streaming_msg_id, 
+                    response
+                )
+                
+                if not success:
+                    # Fallback: send new message
+                    await self.message_manager.safe_send_message(
+                        context, 
+                        update.effective_chat.id, 
+                        response
+                    )
             
             # Log successful response
             logging.info(f"Response sent to user {update.effective_user.id}: {len(response)} chars")
-            
-            return response
             
         except NetworkError as e:
             error_msg = "🌐 Masalah koneksi. Silakan coba lagi dalam beberapa saat."
@@ -148,23 +433,44 @@ Saya masih dalam tahap pengembangan aktif dan terus belajar. Saat ini saya memil
             await self._send_error_message(update, context, error_msg)
     
     async def _send_error_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE, error_msg: str):
-        """Helper method untuk mengirim pesan error"""
+        """Helper method untuk mengirim pesan error dengan safe handling"""
         try:
-            if not context.chat_data.get("has_replied"):
-                full_error_msg = f"{error_msg}\n\n💡 Gunakan /help untuk panduan atau /start untuk memulai ulang."
-                await update.message.reply_text(full_error_msg)
-                context.chat_data["has_replied"] = True
+            full_error_msg = f"{error_msg}\n\n💡 Gunakan /help untuk panduan atau /start untuk memulai ulang."
+            
+            # Cek apakah ada streaming message yang bisa di-edit
+            streaming_msg_id = context.chat_data.get("streaming_message_id")
+            if streaming_msg_id:
+                success = await self.update_streaming_message(
+                    context, 
+                    update.effective_chat.id, 
+                    streaming_msg_id, 
+                    full_error_msg
+                )
+                if success:
+                    return
+            
+            # Fallback: send new message
+            await self.message_manager.safe_send_message(
+                context, 
+                update.effective_chat.id, 
+                full_error_msg
+            )
+            
         except Exception as send_error:
             logging.error(f"Failed to send error message: {str(send_error)}")
-            # Fallback: try to send simple message
+            # Final fallback: try simple message
             try:
-                await update.message.reply_text("⚠️ Sistem sedang bermasalah. Silakan coba lagi.")
+                await self.message_manager.safe_send_message(
+                    context, 
+                    update.effective_chat.id, 
+                    "⚠️ Sistem sedang bermasalah. Silakan coba lagi."
+                )
             except Exception as fallback_error:
                 logging.error(f"Failed to send fallback message: {str(fallback_error)}")
             
     # Fungsi error handler yang lebih comprehensive
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Enhanced error handler dengan logging dan user feedback yang lebih baik"""
+        """Enhanced error handler dengan safe message handling"""
         
         # Log error dengan detail
         logging.error(
@@ -198,19 +504,17 @@ Saya masih dalam tahap pengembangan aktif dan terus belajar. Saat ini saya memil
         else:
             user_message = "🚨 Terjadi kesalahan sistem. Tim teknis sedang memperbaiki."
 
-        # Kirim pesan error ke user
+        # Kirim pesan error dengan safe handling
         try:
             full_message = f"{user_message}\n\n💡 Gunakan /help untuk panduan atau /start untuk memulai ulang."
-            await update.effective_message.reply_text(full_message)
+            await self.message_manager.safe_send_message(
+                context, 
+                update.effective_chat.id, 
+                full_message
+            )
             
         except Exception as send_error:
             logging.error(f'Failed to send error message to user: {str(send_error)}')
-            
-            # Fallback: coba kirim pesan sederhana
-            try:
-                await update.effective_message.reply_text("⚠️ Sistem bermasalah. Silakan coba lagi.")
-            except Exception as fallback_error:
-                logging.error(f'Failed to send fallback error message: {str(fallback_error)}')
 
         # Log statistik error untuk monitoring
         error_type = type(error).__name__
