@@ -9,8 +9,10 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 import requests
 from telegram import Update
+from telegram.ext import ContextTypes
 from bot.utils.database import DatabaseJob, DatabaseCourse, DatabaseIntern
 from bot.utils.keywords_extraction import KeywordExtractor
+import logging
 
 load_dotenv()
 
@@ -131,34 +133,36 @@ class EnhancedLLMIntegration:
             IntentType.UNKNOWN: self._get_unknown_response
         }
     
-    async def process_user_request(self, user_input: str, update: Update) -> str:
+    async def process_user_request(self, user_input: str, update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         """Proses request dengan context awareness dan intent detection"""
         try:
             user_id = update.effective_user.id
-            context = self.conversation_manager.get_context(user_id)
+            user_context = self.conversation_manager.get_context(user_id)
             
             # Deteksi intent
             intent = self.intent_detector.detect_intent(user_input)
             
             # Handle special intents
             if intent in self.response_templates:
-                response = await self.response_templates[intent](user_input, context)
+                response = await self.response_templates[intent](user_input, user_context)
                 self.conversation_manager.add_message(user_id, "user", user_input)
                 self.conversation_manager.add_message(user_id, "assistant", response)
                 return response
             
             # Handle search intents
             if intent in [IntentType.MAGANG, IntentType.PEKERJAAN, IntentType.KURSUS]:
-                return await self._handle_search_intent(user_input, intent, update, context)
+                return await self._handle_search_intent(user_input, intent, update, context, user_context)
             
             # Fallback untuk intent unknown
-            return await self._handle_unknown_with_search(user_input, update, context)
+            return await self._handle_unknown_with_search(user_input, update, context, user_context)
             
         except Exception as e:
+            logging.error(f"Error in process_user_request: {str(e)}")
             return f"⚠️ Terjadi error: {str(e)[:100]}..."
     
     async def _handle_search_intent(self, user_input: str, intent: IntentType, 
-                                    update: Update, context: UserContext) -> str:
+                                    update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                                    user_context: UserContext) -> str:
         """Handle search dengan context awareness"""
         
         # Extract keywords
@@ -168,16 +172,17 @@ class EnhancedLLMIntegration:
         items = await self._search_database(intent, keywords)
         
         if not items:
-            return await self._handle_empty_results(intent, keywords, update, context)
+            return await self._handle_empty_results(intent, keywords, update, context, user_context)
         
         # Update context
-        context.last_search_type = intent.value
+        user_context.last_search_type = intent.value
         
         # Generate enhanced response
-        prompt = self._build_enhanced_prompt(user_input, intent, keywords, items, context)
+        prompt = self._build_enhanced_prompt(user_input, intent, keywords, items, user_context)
         response = await self.generate_response(
             messages=[{"role": "user", "content": prompt}],
-            update=update
+            update=update,
+            context=context
         )
         
         # Save to context
@@ -191,23 +196,27 @@ class EnhancedLLMIntegration:
         """Search database berdasarkan intent"""
         items = []
         
-        if intent == IntentType.MAGANG:
-            items = self.db_intern.search_magang(
-                keyword=" ".join(keywords.get("field", [])),
-                location=" ".join(keywords.get("location", [])),
-                limit=8
-            )
-        elif intent == IntentType.PEKERJAAN:
-            items = self.db_job.search_jobs(
-                keyword=" ".join(keywords.get("field", [])),
-                location=" ".join(keywords.get("location", [])),
-                limit=8
-            )
-        elif intent == IntentType.KURSUS:
-            items = self.db_course.search_course(
-                keyword=" ".join(keywords.get("field", [])),
-                limit=8
-            )
+        try:
+            if intent == IntentType.MAGANG:
+                items = self.db_intern.search_magang(
+                    keyword=" ".join(keywords.get("field", [])),
+                    location=" ".join(keywords.get("location", [])),
+                    limit=8
+                )
+            elif intent == IntentType.PEKERJAAN:
+                items = self.db_job.search_jobs(
+                    keyword=" ".join(keywords.get("field", [])),
+                    location=" ".join(keywords.get("location", [])),
+                    limit=8
+                )
+            elif intent == IntentType.KURSUS:
+                items = self.db_course.search_course(
+                    keyword=" ".join(keywords.get("field", [])),
+                    limit=8
+                )
+        except Exception as e:
+            logging.error(f"Error searching database: {str(e)}")
+            items = []
         
         return items
     
@@ -245,7 +254,7 @@ INSTRUKSI RESPONS:
 4. Tambahkan tips atau insight yang berguna
 5. PENTING: Akhiri dengan pertanyaan follow-up yang relevan untuk memicu interaksi
 6. Gunakan emoji yang sesuai untuk membuat respons lebih menarik
-7. Jika data terbatas, berikan saran pencarian alternatif
+7. Jika data terbatas, berikan hasil yang sesuai dengan jumlah data
 
 CONTOH AKHIRAN INTERAKTIF:
 - "Apakah ada bidang spesifik yang lebih kamu minati?"
@@ -317,7 +326,8 @@ TUJUAN: Membantu user menemukan peluang karir yang sesuai dengan kebutuhan merek
 """
     
     async def _handle_empty_results(self, intent: IntentType, keywords: Dict, 
-                                    update: Update, context: UserContext) -> str:
+                                    update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                                    user_context: UserContext) -> str:
         """Handle ketika tidak ada hasil pencarian"""
         
         suggestions = {
@@ -422,7 +432,8 @@ Coba tanyakan dengan cara yang lebih spesifik ya! 😊
 """
     
     async def _handle_unknown_with_search(self, user_input: str, update: Update, 
-                                            context: UserContext) -> str:
+                                            context: ContextTypes.DEFAULT_TYPE,
+                                            user_context: UserContext) -> str:
         """Handle unknown intent dengan mencoba search"""
         
         # Coba ekstrak keywords dan search
@@ -431,28 +442,33 @@ Coba tanyakan dengan cara yang lebih spesifik ya! 😊
         # Search di semua database
         all_items = []
         
-        # Search magang
-        magang_items = self.db_intern.search_magang(
-            keyword=" ".join(keywords.get("field", [])),
-            location=" ".join(keywords.get("location", [])),
-            limit=3
-        )
-        all_items.extend([{**item, "type": "magang"} for item in magang_items])
-        
-        # Search jobs
-        job_items = self.db_job.search_jobs(
-            keyword=" ".join(keywords.get("field", [])),
-            location=" ".join(keywords.get("location", [])),
-            limit=3
-        )
-        all_items.extend([{**item, "type": "pekerjaan"} for item in job_items])
-        
-        # Search courses
-        course_items = self.db_course.search_course(
-            keyword=" ".join(keywords.get("field", [])),
-            limit=3
-        )
-        all_items.extend([{**item, "type": "kursus"} for item in course_items])
+        try:
+            # Search magang
+            magang_items = self.db_intern.search_magang(
+                keyword=" ".join(keywords.get("field", [])),
+                location=" ".join(keywords.get("location", [])),
+                limit=3
+            )
+            all_items.extend([{**item, "type": "magang"} for item in magang_items])
+            
+            # Search jobs
+            job_items = self.db_job.search_jobs(
+                keyword=" ".join(keywords.get("field", [])),
+                location=" ".join(keywords.get("location", [])),
+                limit=3
+            )
+            all_items.extend([{**item, "type": "pekerjaan"} for item in job_items])
+            
+            # Search courses
+            course_items = self.db_course.search_course(
+                keyword=" ".join(keywords.get("field", [])),
+                limit=3
+            )
+            all_items.extend([{**item, "type": "kursus"} for item in course_items])
+            
+        except Exception as e:
+            logging.error(f"Error in unknown search: {str(e)}")
+            all_items = []
         
         if all_items:
             prompt = f"""
@@ -474,10 +490,11 @@ Gunakan emoji dan format yang menarik.
             
             return await self.generate_response(
                 messages=[{"role": "user", "content": prompt}],
-                update=update
+                update=update,
+                context=context
             )
         
-        return await self._get_unknown_response(user_input, context)
+        return await self._get_unknown_response(user_input, user_context)
     
     def _format_mixed_items(self, items: List[Dict]) -> str:
         """Format mixed items dari berbagai tipe"""
@@ -496,62 +513,59 @@ Gunakan emoji dan format yang menarik.
         
         return "\n".join(formatted)
     
-    async def generate_response(self, messages: List[dict], update: Update) -> str:
+    async def generate_response(self, messages: List[dict], update: Update, 
+                               context: ContextTypes.DEFAULT_TYPE) -> str:
         """Generate response dengan error handling yang lebih baik"""
         payload = {
             "messages": messages,
             "model": "SeaLLMs/SeaLLMs-v3-7B-Chat",
             "stream": True,
-            "max_tokens": 800,  # Increased for better responses
-            "temperature": 0.7,  # Add temperature for more natural responses
+            "max_tokens": 800,
+            "temperature": 0.7,
             "top_p": 0.9
         }
 
-        # Loading message dengan animation
-        loading_msg = await update.message.reply_text("🤔 Sedang berpikir...")
         full_response = ""
         
         try:
-            async with asyncio.timeout(30):  # 30 second timeout
-                with requests.post(self.API_URL, headers=self.HEADERS, 
-                                    json=payload, stream=True, timeout=30) as response:
-                    response.raise_for_status()
-                    
-                    has_content = False
-                    for line in response.iter_lines():
-                        if line:
-                            decoded_line = line.decode('utf-8').strip()
-                            if decoded_line.startswith("data:"):
-                                try:
-                                    chunk = json.loads(decoded_line[5:])
-                                    if chunk.get("choices"):
-                                        content = chunk["choices"][0]["delta"].get("content", "")
-                                        if content:
-                                            has_content = True
-                                            full_response += content
-                                            
-                                            # Update loading message every 10 characters
-                                            if len(full_response) % 10 == 0:
-                                                try:
-                                                    preview = full_response[:100] + "..." if len(full_response) > 100 else full_response
-                                                    await loading_msg.edit_text(f"✍️ {preview}")
-                                                except:
-                                                    pass
-                                except json.JSONDecodeError:
-                                    continue
+            # Set timeout untuk request
+            timeout = 30
+            
+            response = requests.post(
+                self.API_URL, 
+                headers=self.HEADERS, 
+                json=payload, 
+                stream=True, 
+                timeout=timeout
+            )
+            response.raise_for_status()
+            
+            has_content = False
+            for line in response.iter_lines():
+                if line:
+                    decoded_line = line.decode('utf-8').strip()
+                    if decoded_line.startswith("data:"):
+                        try:
+                            chunk = json.loads(decoded_line[5:])
+                            if chunk.get("choices"):
+                                content = chunk["choices"][0]["delta"].get("content", "")
+                                if content:
+                                    has_content = True
+                                    full_response += content
+                        except json.JSONDecodeError:
+                            continue
 
             # Handle empty response
             if not has_content or not full_response.strip():
                 full_response = "⚠️ Maaf, tidak dapat memberikan respons saat ini. Coba lagi dalam beberapa saat."
             
-            await loading_msg.edit_text(full_response)
-            return full_response
+            return full_response.strip()
 
-        except asyncio.TimeoutError:
-            error_msg = "⏱️ Respons terlalu lama. Coba lagi dengan pertanyaan yang lebih sederhana."
-            await loading_msg.edit_text(error_msg)
-            return error_msg
+        except requests.exceptions.Timeout:
+            return "⏱️ Respons terlalu lama. Coba lagi dengan pertanyaan yang lebih sederhana."
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Request error: {str(e)}")
+            return "🚨 Terjadi masalah koneksi. Silakan coba lagi."
         except Exception as e:
-            error_msg = f"🚨 Terjadi error: {str(e)[:100]}..."
-            await loading_msg.edit_text(error_msg)
-            return error_msg
+            logging.error(f"Unexpected error in generate_response: {str(e)}")
+            return f"🚨 Terjadi error: {str(e)[:100]}..."
