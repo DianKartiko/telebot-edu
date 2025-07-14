@@ -1,2 +1,4 @@
 .env
 /database
+Pipfile.lock
+Pipfile

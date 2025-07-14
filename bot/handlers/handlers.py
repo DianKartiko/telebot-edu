@@ -264,9 +264,29 @@ Saya masih dalam tahap pengembangan aktif dan terus belajar. Saat ini saya memil
 /help - Tampilkan menu bantuan
 /info - informasi bot telegram
 
-**Contoh Custom Prompt:**
-"Tampilkan lowongan magang bidang TI di Bandung"
-"Kursus tersedia untuk pemula di bidang keuangan"
+🆘 **Panduan Penggunaan CareerBot:**
+
+**🎯 Untuk Magang:**
+• "Cari magang di [bidang] di [lokasi]"
+• "Magang IT Jakarta"
+• "Internship marketing"
+
+**💼 Untuk Pekerjaan:**
+• "Cari kerja [posisi] di [lokasi]"
+• "Lowongan developer Jakarta"
+• "Pekerjaan remote"
+
+**📚 Untuk Kursus:**
+• "Kursus [topik]"
+• "Pelatihan Python"
+• "Belajar digital marketing"
+
+**💡 Tips:**
+• Gunakan kata kunci yang spesifik
+• Sebutkan lokasi jika perlu
+• Tanyakan hal spesifik yang kamu butuhkan
+
+Ada yang ingin kamu cari sekarang? 🚀
         '''
         await self.message_manager.safe_send_message(context, update.effective_chat.id, text)
 
@@ -284,7 +304,7 @@ Saya masih dalam tahap pengembangan aktif dan terus belajar. Saat ini saya memil
 
     # Fungsi untuk streaming response dengan edit message
     async def stream_response(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
-                             initial_text: str = "🤔 Sedang memproses...") -> Optional[int]:
+                                initial_text: str = "🤔 Sedang memproses...") -> Optional[int]:
         """
         Create initial message untuk streaming dan return message_id
         """
@@ -295,7 +315,7 @@ Saya masih dalam tahap pengembangan aktif dan terus belajar. Saat ini saya memil
         )
     
     async def update_streaming_message(self, context: ContextTypes.DEFAULT_TYPE, 
-                                      chat_id: int, message_id: int, text: str) -> bool:
+                                        chat_id: int, message_id: int, text: str) -> bool:
         """
         Update streaming message dengan safe edit
         """
