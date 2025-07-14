@@ -484,7 +484,7 @@ Gunakan emoji dan format yang menarik.
         return "\n".join(formatted)
     
     async def generate_response(self, messages: List[dict], update: Update, 
-                               context: ContextTypes.DEFAULT_TYPE) -> str:
+                                context: ContextTypes.DEFAULT_TYPE) -> str:
         """Generate response dengan error handling yang lebih baik"""
         payload = {
             "messages": messages,
