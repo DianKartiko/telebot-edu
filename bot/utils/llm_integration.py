@@ -21,7 +21,6 @@ class IntentType(Enum):
     PEKERJAAN = "pekerjaan"
     KURSUS = "kursus"
     GREETING = "greeting"
-    HELP = "help"
     UNKNOWN = "unknown"
 
 @dataclass
@@ -88,11 +87,6 @@ class EnhancedIntentDetector:
                 r'\bapa kabar\b',
                 r'\bmulai\b'
             ],
-            IntentType.HELP: [
-                r'\b(help|bantuan|panduan|cara)\b',
-                r'\bbisa.*apa\b',
-                r'\bfitur.*apa\b'
-            ]
         }
     
     def detect_intent(self, text: str) -> IntentType:
@@ -129,7 +123,6 @@ class EnhancedLLMIntegration:
         # Response templates
         self.response_templates = {
             IntentType.GREETING: self._get_greeting_response,
-            IntentType.HELP: self._get_help_response,
             IntentType.UNKNOWN: self._get_unknown_response
         }
     
@@ -256,13 +249,18 @@ INSTRUKSI RESPONS:
 6. Gunakan emoji yang sesuai untuk membuat respons lebih menarik
 7. Jika data terbatas, berikan hasil yang sesuai dengan jumlah data
 
+
 CONTOH AKHIRAN INTERAKTIF:
 - "Apakah ada bidang spesifik yang lebih kamu minati?"
 - "Mau saya carikan info gaji untuk posisi ini?"
 - "Butuh rekomendasi kursus untuk persiapan interview?"
+- PENTING: Jika terdapat data yang terbatas akhiri dengan:
+- "Yah, data yang tersedia terbatas dan hanya itu yang sesuai"
+- "Maaf ya, data yang dicari terbatas"
+- "Saya bisa merekomendasikan pekerjaan yang lain jika tidak keberatan"
 
 FORMAT RESPONS:
-- Gunakan bullet points untuk daftar
+- Gunakan bullet points untuk daftar dan font bold untuk judul
 - Berikan ranking berdasarkan relevansi
 - Sertakan call-to-action yang jelas
 """
@@ -388,34 +386,6 @@ Mau coba dengan kata kunci yang berbeda? Saya siap membantu! 😊
 Apa yang sedang kamu cari hari ini? 😊
 """
     
-    async def _get_help_response(self, user_input: str, context: UserContext) -> str:
-        """Response untuk help"""
-        return """
-🆘 **Panduan Penggunaan CareerBot:**
-
-**🎯 Untuk Magang:**
-• "Cari magang di [bidang] di [lokasi]"
-• "Magang IT Jakarta"
-• "Internship marketing"
-
-**💼 Untuk Pekerjaan:**
-• "Cari kerja [posisi] di [lokasi]"
-• "Lowongan developer Jakarta"
-• "Pekerjaan remote"
-
-**📚 Untuk Kursus:**
-• "Kursus [topik]"
-• "Pelatihan Python"
-• "Belajar digital marketing"
-
-**💡 Tips:**
-• Gunakan kata kunci yang spesifik
-• Sebutkan lokasi jika perlu
-• Tanyakan hal spesifik yang kamu butuhkan
-
-Ada yang ingin kamu cari sekarang? 🚀
-"""
-    
     async def _get_unknown_response(self, user_input: str, context: UserContext) -> str:
         """Response untuk intent yang tidak dikenali"""
         return """
@@ -426,7 +396,7 @@ Saya bisa membantu kamu mencari:
 • 💼 **Pekerjaan** - ketik "cari kerja [posisi]"
 • 📚 **Kursus** - ketik "cari kursus [topik]"
 
-Atau ketik "help" untuk panduan lengkap.
+Atau ketik "/help" untuk panduan lengkap.
 
 Coba tanyakan dengan cara yang lebih spesifik ya! 😊
 """
