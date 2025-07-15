@@ -34,7 +34,7 @@ Bot Telegram ini dirancang untuk membantu mahasiswa menemukan informasi terkait 
 ## Teknologi yang Digunakan
 
 -   **Model AI:** SeaLLMs/SeaLLMs-v3-7B-Chat
--   **Bahasa Pemrograman:** Python 3.10+
+-   **Bahasa Pemrograman:** Python 3.12
 -   **Library Utama:** `python-telegram-bot` v.20
 -   **Manajemen Lingkungan Virtual:** `venv` (Direkomendasikan), `pipenv` (Sedang digunakan)
 
