@@ -1,0 +1,27 @@
+# fly.toml app configuration file generated for telebot-education on 2025-07-14T12:24:26+07:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'telebot-education'
+primary_region = 'sin'
+
+[build]
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  max_machines_running = 1
+  processes = ['app']
+
+[mounts]
+  source = "telebot_data"    # Nama volume
+  destination = "/app/data"      # Path di container
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1

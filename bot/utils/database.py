@@ -8,10 +8,25 @@ from dotenv import load_dotenv
 # Load konfigurasi dari .env
 load_dotenv()
 
+def init_databases():
+    """Initialize database directories and paths"""
+    data_dir = Path(os.environ.get('DATABASE_PATH', './database/'))
+    data_dir.mkdir(exist_ok=True)
+    
+    # Set default database paths jika environment variables tidak ada
+    if not os.getenv('DB_INTERN'):
+        os.environ['DB_INTERN'] = str(data_dir / 'intern.db')
+    if not os.getenv('DB_JOB'):
+        os.environ['DB_JOB'] = str(data_dir / 'job.db')
+    if not os.getenv('DB_COURSE'):
+        os.environ['DB_COURSE'] = str(data_dir / 'course.db')
+
 class DatabaseIntern:
     def __init__(self):
+        # Pastikan database directories sudah diinisialisasi
+        init_databases()
         self.db_path = Path(os.getenv("DB_INTERN"))
-        self.db_path.parent.mkdir(exist_ok=True)  # Buat folder jika belum ada
+        self.db_path.parent.mkdir(exist_ok=True)
         self._init_db()
 
     def _init_db(self):
@@ -86,6 +101,7 @@ class DatabaseIntern:
 
 class DatabaseJob:
     def __init__(self):
+        init_databases()
         self.db_path = Path(os.getenv('DB_JOB'))
         self.db_path.parent.mkdir(exist_ok=True)
         self._init_db()
@@ -106,6 +122,7 @@ class DatabaseJob:
             UNIQUE(perusahaan, posisi) 
             )
         """)
+            conn.commit()
 
     def _get_connection(self):
         """Koneksi ke SQLite dengan hasil berupa dictionary"""
@@ -159,6 +176,7 @@ class DatabaseJob:
 
 class DatabaseCourse:
     def __init__(self):
+        init_databases()
         self.db_path = Path(os.getenv('DB_COURSE'))
         self.db_path.parent.mkdir(exist_ok=True)
         self._init_db()
@@ -184,7 +202,7 @@ class DatabaseCourse:
         conn.row_factory = sqlite3.Row
         return conn
     
-    def save_courses(self, data):  # Ubah nama method untuk konsistensi
+    def save_courses(self, data):
         """Simpan data course dari Dicoding"""
         if not data:
             return
